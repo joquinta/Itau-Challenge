@@ -1,0 +1,166 @@
+#Setting
+rm(list=ls())     #Limpia lista de objetos
+graphics.off()    #Limpia los graficos
+options(digits=5) #Numero de digitos a mostrar
+options(scipen=999)
+
+#Librerias
+#install.packages('ggplot2')
+#The downloaded binary packages are in C:\Users\joqui\AppData\Local\Temp\RtmpAbK7e5\downloaded_packages
+install.packages('tidyr')
+
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+
+campanas <- read.csv("Campanas_train.csv")
+transacciones <- read.csv("Transaccion_train.csv")
+comuni<- read.csv("Comunicaciones_train.csv")
+consumidores<- read.csv("Consumidores.csv")
+
+#####Exploracion de los datos#####
+
+summary(transacciones)
+str(transacciones)
+
+
+ggplot(transacciones, aes(x=Producto.Tipo))+geom_bar()
+summary(transacciones$Monto)
+hist(transacciones$Monto, col="blue", breaks= 100)
+barplot(table(transacciones$Producto.Tipo), col = "blue")
+
+#with(transacciones, plot(Monto, Tipo)) dos variables numericas
+#df2<- aggregate(Monto ~ Producto.Tipo, transacciones, mean)
+#ggplot(df2,aes(Producto.Tipo,Monto))+geom_bar(stat = "identity")
+#df3<- as.data.frame(prop.table(table(transacciones$Producto.Tipo))*100)
+#df5 <- transacciones %>% group_by(id,Producto.Tipo,Periodo, media=mean(Monto))
+#df5 %>% summarise(n = n())
+
+#####Manejo de bases#####
+
+#transa_2 <-transacciones %>% group_by(Producto.Tipo) %>% summarise(frecuency = n(),mean(Monto))
+
+transa_agrupadas <- transacciones %>% group_by(id,Producto.Tipo) %>% summarise(frecuency = n(),max(Periodo),min(Periodo))
+transa_agrupadas_id <- transa_agrupadas %>% pivot_wider(names_from = Producto.Tipo, values_from = c(frecuency,`min(Periodo)`, `max(Periodo)`))
+write.csv(transa_agrupadas,"Transacciones_agrupadas.csv")
+
+
+campanas_agrupadas <- campanas %>% group_by(id,Producto.Tipo) %>% summarise(frecuency = n(),max(Periodo),min(Periodo))
+campanas_agrupadas_id <- campanas_agrupadas %>% pivot_wider(names_from = Producto.Tipo, values_from = c(frecuency,`min(Periodo)`, `max(Periodo)`))
+transa_campanas_agrupadas_id <- left_join(transa_agrupadas_id, campanas_agrupadas_id, by = "id", copy=FALSE, suffix=c(".transa_agrupadas_id",".campanas_agrupadas_id"))
+
+comuni_agrupadas <- comuni %>% group_by(id,Producto.Tipo) %>% summarise(frecuency = n(),max(Periodo),min(Periodo))
+comuni_agrupadas_id <- comuni_agrupadas %>% pivot_wider(names_from = Producto.Tipo, values_from = c(frecuency,`min(Periodo)`, `max(Periodo)`))
+transa_campanas_comuni_agrupadas_id <- left_join(transa_campanas_agrupadas_id, comuni_agrupadas_id, by = "id", copy=FALSE, suffix=c(".transa_campanas_agrupadas_id",".comuni_agrupadas_id"))
+
+agrupadas_id_final <- left_join(transa_campanas_comuni_agrupadas_id, consumidores, by = "id", copy=FALSE, suffix=c(".transa_campanas_comuni_agrupadas_id",".consumidores"))
+
+write.csv(agrupadas_id_final,"Agrupacion_final.csv")
+
+#reemplazo de NA#
+
+agrupadas_id_final$`frecuency_F-D`[is.na(agrupadas_id_final$`frecuency_F-D`)] <- 0
+agrupadas_id_final$`frecuency_A-G`[is.na(agrupadas_id_final$`frecuency_A-G`)] <- 0
+agrupadas_id_final$`frecuency_A-K`[is.na(agrupadas_id_final$`frecuency_A-K`)] <- 0
+agrupadas_id_final$`frecuency_F-H`[is.na(agrupadas_id_final$`frecuency_F-H`)] <- 0
+agrupadas_id_final$`frecuency_F-I`[is.na(agrupadas_id_final$`frecuency_F-I`)] <- 0
+agrupadas_id_final$`frecuency_F-J`[is.na(agrupadas_id_final$`frecuency_F-J`)] <- 0
+agrupadas_id_final$`frecuency_G-K`[is.na(agrupadas_id_final$`frecuency_G-K`)] <- 0
+agrupadas_id_final$`frecuency_B-B.transa_agrupadas_id`[is.na(agrupadas_id_final$`frecuency_B-B.transa_agrupadas_id`)] <- 0
+agrupadas_id_final$`frecuency_C-C`[is.na(agrupadas_id_final$`frecuency_C-C`)] <- 0
+agrupadas_id_final$`frecuency_C-D.transa_agrupadas_id`[is.na(agrupadas_id_final$`frecuency_C-D.transa_agrupadas_id`)] <- 0
+agrupadas_id_final$`frecuency_D-E.transa_agrupadas_id`[is.na(agrupadas_id_final$`frecuency_D-E.transa_agrupadas_id`)] <- 0
+agrupadas_id_final$`frecuency_D-F`[is.na(agrupadas_id_final$`frecuency_D-F`)] <- 0
+agrupadas_id_final$`frecuency_E-E.transa_campanas_agrupadas_id`[is.na(agrupadas_id_final$`frecuency_E-E.transa_campanas_agrupadas_id`)] <- 0
+agrupadas_id_final$`frecuency_E-F`[is.na(agrupadas_id_final$`frecuency_E-F`)] <- 0
+agrupadas_id_final$`frecuency_A-A.transa_agrupadas_id`[is.na(agrupadas_id_final$`frecuency_A-A.transa_agrupadas_id`)] <- 0
+agrupadas_id_final$`frecuency_A-L`[is.na(agrupadas_id_final$`frecuency_A-L`)] <- 0
+
+
+#expuesto a comunicacion#
+#agrupadas_id_final$comuni_AA <- ifelse(agrupadas_id_final$`min(Periodo)_A-A.transa_agrupadas_id` >= agrupadas_id_final$`min(Periodo)_A-A`, "1" ,ifelse(agrupadas_id_final$`max(Periodo)_A-A.transa_agrupadas_id` >= agrupadas_id_final$`min(Periodo)_A-A`,"1","0"))
+
+agrupadas_id_final$comuni_AA <- ifelse(is.na(agrupadas_id_final$`min(Periodo)_A-A`), "0" ,"1")
+agrupadas_id_final$comuni_BB <- ifelse(is.na(agrupadas_id_final$`min(Periodo)_B-B`), "0" ,"1")
+agrupadas_id_final$comuni_CD <- ifelse(is.na(agrupadas_id_final$`min(Periodo)_C-D`), "0" ,"1")
+agrupadas_id_final$comuni_DE <- ifelse(is.na(agrupadas_id_final$`min(Periodo)_D-E`), "0" ,"1")
+agrupadas_id_final$comuni_EE <- ifelse(is.na(agrupadas_id_final$`min(Periodo)_E-E.comuni_agrupadas_id`), "0","1")
+
+#expuesto a campana#
+
+agrupadas_id_final$campana_AA <- ifelse(is.na(agrupadas_id_final$`min(Periodo)_A-A.campanas_agrupadas_id`), "0" ,"1")
+agrupadas_id_final$campana_BB <- ifelse(is.na(agrupadas_id_final$`min(Periodo)_B-B.campanas_agrupadas_id`), "0" ,"1")
+agrupadas_id_final$campana_CD <- ifelse(is.na(agrupadas_id_final$`min(Periodo)_C-D.campanas_agrupadas_id`), "0" ,"1")
+agrupadas_id_final$campana_DE <- ifelse(is.na(agrupadas_id_final$`min(Periodo)_D-E.campanas_agrupadas_id`), "0" ,"1")
+
+#agregar segmento de frecuencia de uso
+
+agrupadas_id_final$sumafrecuencias <- (agrupadas_id_final$`frecuency_A-G`+agrupadas_id_final$`frecuency_A-K`+agrupadas_id_final$`frecuency_F-D`+agrupadas_id_final$`frecuency_F-H`+agrupadas_id_final$`frecuency_F-I`+agrupadas_id_final$`frecuency_F-J`+agrupadas_id_final$`frecuency_G-K`+agrupadas_id_final$`frecuency_C-C`+agrupadas_id_final$`frecuency_D-F`+agrupadas_id_final$`frecuency_E-F`+agrupadas_id_final$`frecuency_E-F`+agrupadas_id_final$`frecuency_A-L`)
+
+agrupadas_id_final$tiene_AG <- ifelse(agrupadas_id_final$`frecuency_A-G`>="1","1","0")
+agrupadas_id_final$tiene_AK <- ifelse(agrupadas_id_final$`frecuency_A-K`>="1","1","0")
+agrupadas_id_final$tiene_GK <- ifelse(agrupadas_id_final$`frecuency_G-K`>="1","1","0")
+agrupadas_id_final$tiene_DF <- ifelse(agrupadas_id_final$`frecuency_D-F`>="1","1","0")
+agrupadas_id_final$tiene_EF <- ifelse(agrupadas_id_final$`frecuency_E-F`>="1","1","0")
+agrupadas_id_final$tiene_CC <- ifelse(agrupadas_id_final$`frecuency_C-C`>="1","1","0")
+
+
+agrupadas_id_final$tiene_AA <- ifelse(agrupadas_id_final$`frecuency_A-A.transa_agrupadas_id`>="1","1","0")
+agrupadas_id_final$tiene_BB <- ifelse(agrupadas_id_final$`frecuency_B-B.transa_agrupadas_id`>="1","1","0")
+agrupadas_id_final$tiene_CD <- ifelse(agrupadas_id_final$`frecuency_C-D.transa_agrupadas_id`>="1","1","0")
+agrupadas_id_final$tiene_DE <- ifelse(agrupadas_id_final$`frecuency_D-E.transa_agrupadas_id`>="1","1","0")
+agrupadas_id_final$tiene_EE <- ifelse(agrupadas_id_final$`frecuency_E-E.transa_campanas_agrupadas_id`>="1","1","0")
+
+#grupos frec
+
+agrupadas_id_final$grupo_frec[agrupadas_id_final$sumafrecuencias<= 250] <- "BAJO"
+agrupadas_id_final$grupo_frec[agrupadas_id_final$sumafrecuencias> 250 & agrupadas_id_final$sumafrecuencias<= 550] <- "MEDIO"
+agrupadas_id_final$grupo_frec[agrupadas_id_final$sumafrecuencias>550] <- "ALTO"
+
+#grupos renta
+
+agrupadas_id_final$grupo_renta_AA[agrupadas_id_final$Renta== "R7"| agrupadas_id_final$Renta== "R8" | agrupadas_id_final$Renta== "R9" | agrupadas_id_final$Renta== "R10" | agrupadas_id_final$Renta== "R11" | agrupadas_id_final$Renta== "R12" | agrupadas_id_final$Renta== "R16"] <- "1"
+agrupadas_id_final$grupo_renta_BB[agrupadas_id_final$Renta== "R6"| agrupadas_id_final$Renta== "R7" | agrupadas_id_final$Renta== "R8" | agrupadas_id_final$Renta== "R9" | agrupadas_id_final$Renta== "R10" | agrupadas_id_final$Renta== "R11" | agrupadas_id_final$Renta== "R12" | agrupadas_id_final$Renta== "R13" | agrupadas_id_final$Renta== "R14"| agrupadas_id_final$Renta== "R21"| agrupadas_id_final$Renta== "R15"| agrupadas_id_final$Renta== "R16"| agrupadas_id_final$Renta== "R17"| agrupadas_id_final$Renta== "R18"] <- "1"
+agrupadas_id_final$grupo_renta_CD[agrupadas_id_final$Renta== "R1"| agrupadas_id_final$Renta== "R11" | agrupadas_id_final$Renta== "R15"] <- "1"
+agrupadas_id_final$grupo_renta_DE[agrupadas_id_final$Renta== "R6"| agrupadas_id_final$Renta== "R7" | agrupadas_id_final$Renta== "R8" | agrupadas_id_final$Renta== "R9" | agrupadas_id_final$Renta== "R10" | agrupadas_id_final$Renta== "R11" | agrupadas_id_final$Renta== "R12" | agrupadas_id_final$Renta== "R13" | agrupadas_id_final$Renta== "R14"| agrupadas_id_final$Renta== "R21"| agrupadas_id_final$Renta== "R15"| agrupadas_id_final$Renta== "R16"| agrupadas_id_final$Renta== "R17"| agrupadas_id_final$Renta== "R18" | agrupadas_id_final$Renta== "R19" | agrupadas_id_final$Renta== "R20"] <- "1"
+agrupadas_id_final$grupo_renta_EE[agrupadas_id_final$Renta== "R9" | agrupadas_id_final$Renta== "R10" | agrupadas_id_final$Renta== "R11" | agrupadas_id_final$Renta== "R12" | agrupadas_id_final$Renta== "R13" | agrupadas_id_final$Renta== "R14"| agrupadas_id_final$Renta== "R21"| agrupadas_id_final$Renta== "R15"| agrupadas_id_final$Renta== "R16"| agrupadas_id_final$Renta== "R17"| agrupadas_id_final$Renta== "R18" | agrupadas_id_final$Renta== "R19"| agrupadas_id_final$Renta== "R20"] <- "1"
+
+#grupos comuna
+
+agrupadas_id_final$grupo_comuna_AA[agrupadas_id_final$Comuna== "70"| agrupadas_id_final$Comuna== "37" | agrupadas_id_final$Comuna== "150"| agrupadas_id_final$Comuna== "10"| agrupadas_id_final$Comuna== "330"| agrupadas_id_final$Comuna== "106"| agrupadas_id_final$Comuna== "103"] <- "1"
+agrupadas_id_final$grupo_comuna_BB[agrupadas_id_final$Comuna== "71"| agrupadas_id_final$Comuna== "91" | agrupadas_id_final$Comuna== "72"| agrupadas_id_final$Comuna== "37"| agrupadas_id_final$Comuna== "322"| agrupadas_id_final$Comuna== "92"| agrupadas_id_final$Comuna== "331"| agrupadas_id_final$Comuna== "332"| agrupadas_id_final$Comuna== "334"| agrupadas_id_final$Comuna== "76"| agrupadas_id_final$Comuna== "99"] <- "1"
+agrupadas_id_final$grupo_comuna_CD[agrupadas_id_final$Comuna== "71"| agrupadas_id_final$Comuna== "91" | agrupadas_id_final$Comuna== "72"| agrupadas_id_final$Comuna== "188"| agrupadas_id_final$Comuna== "92"| agrupadas_id_final$Comuna== "331"] <- "1"
+agrupadas_id_final$grupo_comuna_DE[agrupadas_id_final$Comuna== "71"| agrupadas_id_final$Comuna== "72" | agrupadas_id_final$Comuna== "92"| agrupadas_id_final$Comuna== "331"| agrupadas_id_final$Comuna== "332"| agrupadas_id_final$Comuna== "334"| agrupadas_id_final$Comuna== "76"] <- "1"
+agrupadas_id_final$grupo_comuna_EE[agrupadas_id_final$Comuna== "188"| agrupadas_id_final$Comuna== "37" | agrupadas_id_final$Comuna== "322"| agrupadas_id_final$Comuna== "92"| agrupadas_id_final$Comuna== "331"| agrupadas_id_final$Comuna== "34"| agrupadas_id_final$Comuna== "243"| agrupadas_id_final$Comuna== "150"] <- "1"
+
+#reemplazo NA grupo renta y comuna
+
+agrupadas_id_final$grupo_renta_AA[is.na(agrupadas_id_final$grupo_renta_AA)] <- 0
+agrupadas_id_final$grupo_renta_BB[is.na(agrupadas_id_final$grupo_renta_BB)] <- 0
+agrupadas_id_final$grupo_renta_CD[is.na(agrupadas_id_final$grupo_renta_CD)] <- 0
+agrupadas_id_final$grupo_renta_DE[is.na(agrupadas_id_final$grupo_renta_DE)] <- 0
+agrupadas_id_final$grupo_renta_EE[is.na(agrupadas_id_final$grupo_renta_EE)] <- 0
+
+agrupadas_id_final$grupo_comuna_AA[is.na(agrupadas_id_final$grupo_comuna_AA)] <- 0
+agrupadas_id_final$grupo_comuna_BB[is.na(agrupadas_id_final$grupo_comuna_BB)] <- 0
+agrupadas_id_final$grupo_comuna_CD[is.na(agrupadas_id_final$grupo_comuna_CD)] <- 0
+agrupadas_id_final$grupo_comuna_DE[is.na(agrupadas_id_final$grupo_comuna_DE)] <- 0
+agrupadas_id_final$grupo_comuna_EE[is.na(agrupadas_id_final$grupo_comuna_EE)] <- 0
+
+
+#reemplazo NA campanas y comunic#
+#agrupadas_id_final$comuni_AA[is.na(agrupadas_id_final$comuni_AA)] <- 0
+#agrupadas_id_final$comuni_BB[is.na(agrupadas_id_final$comuni_BB)] <- 0
+#agrupadas_id_final$comuni_CD[is.na(agrupadas_id_final$comuni_CD)] <- 0 
+#agrupadas_id_final$comuni_DE[is.na(agrupadas_id_final$comuni_DE)] <- 0 
+#agrupadas_id_final$comuni_EE[is.na(agrupadas_id_final$comuni_EE)] <- 0 
+#agrupadas_id_final$campana_AA[is.na(agrupadas_id_final$campana_AA)] <- 0 
+#agrupadas_id_final$campana_BB[is.na(agrupadas_id_final$campana_BB)] <- 0 
+#agrupadas_id_final$campana_CD[is.na(agrupadas_id_final$campana_CD)] <- 0
+#agrupadas_id_final$campana_DE[is.na(agrupadas_id_final$campana_DE)] <- 0
+
+
+
+write.csv(agrupadas_id_final,"Agrupacion_final_tablon.csv")
+
+
