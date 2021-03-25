@@ -1,0 +1,573 @@
+#Setting
+rm(list=ls())     #Limpia lista de objetos
+graphics.off()    #Limpia los graficos
+options(digits=5) #Numero de digitos a mostrar
+options(scipen=999)
+memory.limit(12000)
+gc()
+
+
+#Librerias
+#install.packages('ggplot2')
+#The downloaded binary packages are in C:\Users\joqui\AppData\Local\Temp\RtmpAbK7e5\downloaded_packages
+install.packages('corrplot')
+install.packages('e1071', dependencies=TRUE)
+
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(caret)
+library(devtools)
+library(Metrics)
+library(rpart.plot)
+library(rgr)
+library(corrplot)
+
+
+campanas <- read.csv("Campanas_train.csv")
+transacciones <- read.csv("Transaccion_train.csv")
+comuni<- read.csv("Comunicaciones_train.csv")
+consumidores<- read.csv("Consumidores.csv")
+
+#####Exploracion de los datos#####
+
+summary(transacciones)
+str(transacciones)
+
+
+ggplot(transacciones, aes(x=Producto.Tipo))+geom_bar()
+summary(transacciones$Monto)
+hist(transacciones$Monto, col="blue", breaks= 100)
+barplot(table(transacciones$Producto.Tipo), col = "blue")
+
+#with(transacciones, plot(Monto, Tipo)) dos variables numericas
+#df2<- aggregate(Monto ~ Producto.Tipo, transacciones, mean)
+#ggplot(df2,aes(Producto.Tipo,Monto))+geom_bar(stat = "identity")
+#df3<- as.data.frame(prop.table(table(transacciones$Producto.Tipo))*100)
+#df5 <- transacciones %>% group_by(id,Producto.Tipo,Periodo, media=mean(Monto))
+#df5 %>% summarise(n = n())
+
+#####Manejo de bases#####
+
+#transa_2 <-transacciones %>% group_by(Producto.Tipo) %>% summarise(frecuency = n(),mean(Monto))
+
+transa_agrupadas <- transacciones %>% group_by(id,Producto.Tipo) %>% summarise(frecuency = n(),max(Periodo),min(Periodo))
+transa_agrupadas_id <- transa_agrupadas %>% pivot_wider(names_from = Producto.Tipo, values_from = c(frecuency,`min(Periodo)`, `max(Periodo)`))
+write.csv(transa_agrupadas,"Transacciones_agrupadas.csv")
+
+
+campanas_agrupadas <- campanas %>% group_by(id,Producto.Tipo) %>% summarise(frecuency = n(),max(Periodo),min(Periodo))
+campanas_agrupadas_id <- campanas_agrupadas %>% pivot_wider(names_from = Producto.Tipo, values_from = c(frecuency,`min(Periodo)`, `max(Periodo)`))
+transa_campanas_agrupadas_id <- left_join(transa_agrupadas_id, campanas_agrupadas_id, by = "id", copy=FALSE, suffix=c(".transa_agrupadas_id",".campanas_agrupadas_id"))
+
+comuni_agrupadas <- comuni %>% group_by(id,Producto.Tipo) %>% summarise(frecuency = n(),max(Periodo),min(Periodo))
+comuni_agrupadas_id <- comuni_agrupadas %>% pivot_wider(names_from = Producto.Tipo, values_from = c(frecuency,`min(Periodo)`, `max(Periodo)`))
+transa_campanas_comuni_agrupadas_id <- left_join(transa_campanas_agrupadas_id, comuni_agrupadas_id, by = "id", copy=FALSE, suffix=c(".transa_campanas_agrupadas_id",".comuni_agrupadas_id"))
+
+agrupadas_id_final <- left_join(transa_campanas_comuni_agrupadas_id, consumidores, by = "id", copy=FALSE, suffix=c(".transa_campanas_comuni_agrupadas_id",".consumidores"))
+
+write.csv(agrupadas_id_final,"Agrupacion_final.csv")
+
+#reemplazo de NA#
+
+agrupadas_id_final$`frecuency_F-D`[is.na(agrupadas_id_final$`frecuency_F-D`)] <- 0
+agrupadas_id_final$`frecuency_A-G`[is.na(agrupadas_id_final$`frecuency_A-G`)] <- 0
+agrupadas_id_final$`frecuency_A-K`[is.na(agrupadas_id_final$`frecuency_A-K`)] <- 0
+agrupadas_id_final$`frecuency_F-H`[is.na(agrupadas_id_final$`frecuency_F-H`)] <- 0
+agrupadas_id_final$`frecuency_F-I`[is.na(agrupadas_id_final$`frecuency_F-I`)] <- 0
+agrupadas_id_final$`frecuency_F-J`[is.na(agrupadas_id_final$`frecuency_F-J`)] <- 0
+agrupadas_id_final$`frecuency_G-K`[is.na(agrupadas_id_final$`frecuency_G-K`)] <- 0
+agrupadas_id_final$`frecuency_B-B.transa_agrupadas_id`[is.na(agrupadas_id_final$`frecuency_B-B.transa_agrupadas_id`)] <- 0
+agrupadas_id_final$`frecuency_C-C`[is.na(agrupadas_id_final$`frecuency_C-C`)] <- 0
+agrupadas_id_final$`frecuency_C-D.transa_agrupadas_id`[is.na(agrupadas_id_final$`frecuency_C-D.transa_agrupadas_id`)] <- 0
+agrupadas_id_final$`frecuency_D-E.transa_agrupadas_id`[is.na(agrupadas_id_final$`frecuency_D-E.transa_agrupadas_id`)] <- 0
+agrupadas_id_final$`frecuency_D-F`[is.na(agrupadas_id_final$`frecuency_D-F`)] <- 0
+agrupadas_id_final$`frecuency_E-E.transa_campanas_agrupadas_id`[is.na(agrupadas_id_final$`frecuency_E-E.transa_campanas_agrupadas_id`)] <- 0
+agrupadas_id_final$`frecuency_E-F`[is.na(agrupadas_id_final$`frecuency_E-F`)] <- 0
+agrupadas_id_final$`frecuency_A-A.transa_agrupadas_id`[is.na(agrupadas_id_final$`frecuency_A-A.transa_agrupadas_id`)] <- 0
+agrupadas_id_final$`frecuency_A-L`[is.na(agrupadas_id_final$`frecuency_A-L`)] <- 0
+
+
+#expuesto a comunicacion#
+#agrupadas_id_final$comuni_AA <- ifelse(agrupadas_id_final$`min(Periodo)_A-A.transa_agrupadas_id` >= agrupadas_id_final$`min(Periodo)_A-A`, "1" ,ifelse(agrupadas_id_final$`max(Periodo)_A-A.transa_agrupadas_id` >= agrupadas_id_final$`min(Periodo)_A-A`,"1","0"))
+
+agrupadas_id_final$comuni_AA <- ifelse(is.na(agrupadas_id_final$`min(Periodo)_A-A`), "0" ,"1")
+agrupadas_id_final$comuni_BB <- ifelse(is.na(agrupadas_id_final$`min(Periodo)_B-B`), "0" ,"1")
+agrupadas_id_final$comuni_CD <- ifelse(is.na(agrupadas_id_final$`min(Periodo)_C-D`), "0" ,"1")
+agrupadas_id_final$comuni_DE <- ifelse(is.na(agrupadas_id_final$`min(Periodo)_D-E`), "0" ,"1")
+agrupadas_id_final$comuni_EE <- ifelse(is.na(agrupadas_id_final$`min(Periodo)_E-E.comuni_agrupadas_id`), "0","1")
+
+#expuesto a campana#
+
+agrupadas_id_final$campana_AA <- ifelse(is.na(agrupadas_id_final$`min(Periodo)_A-A.campanas_agrupadas_id`), "0" ,"1")
+agrupadas_id_final$campana_BB <- ifelse(is.na(agrupadas_id_final$`min(Periodo)_B-B.campanas_agrupadas_id`), "0" ,"1")
+agrupadas_id_final$campana_CD <- ifelse(is.na(agrupadas_id_final$`min(Periodo)_C-D.campanas_agrupadas_id`), "0" ,"1")
+agrupadas_id_final$campana_DE <- ifelse(is.na(agrupadas_id_final$`min(Periodo)_D-E.campanas_agrupadas_id`), "0" ,"1")
+
+#agregar segmento de frecuencia de uso
+
+agrupadas_id_final$sumafrecuencias <- (agrupadas_id_final$`frecuency_A-G`+agrupadas_id_final$`frecuency_A-K`+agrupadas_id_final$`frecuency_F-D`+agrupadas_id_final$`frecuency_F-H`+agrupadas_id_final$`frecuency_F-I`+agrupadas_id_final$`frecuency_F-J`+agrupadas_id_final$`frecuency_G-K`+agrupadas_id_final$`frecuency_C-C`+agrupadas_id_final$`frecuency_D-F`+agrupadas_id_final$`frecuency_E-F`+agrupadas_id_final$`frecuency_E-F`+agrupadas_id_final$`frecuency_A-L`)
+
+agrupadas_id_final$tiene_AG <- ifelse(agrupadas_id_final$`frecuency_A-G`>="1","1","0")
+agrupadas_id_final$tiene_AK <- ifelse(agrupadas_id_final$`frecuency_A-K`>="1","1","0")
+agrupadas_id_final$tiene_GK <- ifelse(agrupadas_id_final$`frecuency_G-K`>="1","1","0")
+agrupadas_id_final$tiene_DF <- ifelse(agrupadas_id_final$`frecuency_D-F`>="1","1","0")
+agrupadas_id_final$tiene_EF <- ifelse(agrupadas_id_final$`frecuency_E-F`>="1","1","0")
+agrupadas_id_final$tiene_CC <- ifelse(agrupadas_id_final$`frecuency_C-C`>="1","1","0")
+
+
+agrupadas_id_final$tiene_AA <- ifelse(agrupadas_id_final$`frecuency_A-A.transa_agrupadas_id`>="1","1","0")
+agrupadas_id_final$tiene_BB <- ifelse(agrupadas_id_final$`frecuency_B-B.transa_agrupadas_id`>="1","1","0")
+agrupadas_id_final$tiene_CD <- ifelse(agrupadas_id_final$`frecuency_C-D.transa_agrupadas_id`>="1","1","0")
+agrupadas_id_final$tiene_DE <- ifelse(agrupadas_id_final$`frecuency_D-E.transa_agrupadas_id`>="1","1","0")
+agrupadas_id_final$tiene_EE <- ifelse(agrupadas_id_final$`frecuency_E-E.transa_campanas_agrupadas_id`>="1","1","0")
+
+#grupos frec
+
+agrupadas_id_final$grupo_frec[agrupadas_id_final$sumafrecuencias<= 250] <- "BAJO"
+agrupadas_id_final$grupo_frec[agrupadas_id_final$sumafrecuencias> 250 & agrupadas_id_final$sumafrecuencias<= 550] <- "MEDIO"
+agrupadas_id_final$grupo_frec[agrupadas_id_final$sumafrecuencias>550] <- "ALTO"
+
+#grupos renta
+
+agrupadas_id_final$grupo_renta_AA[agrupadas_id_final$Renta== "R7"| agrupadas_id_final$Renta== "R8" | agrupadas_id_final$Renta== "R9" | agrupadas_id_final$Renta== "R10" | agrupadas_id_final$Renta== "R11" | agrupadas_id_final$Renta== "R12" | agrupadas_id_final$Renta== "R16"] <- "1"
+agrupadas_id_final$grupo_renta_BB[agrupadas_id_final$Renta== "R6"| agrupadas_id_final$Renta== "R7" | agrupadas_id_final$Renta== "R8" | agrupadas_id_final$Renta== "R9" | agrupadas_id_final$Renta== "R10" | agrupadas_id_final$Renta== "R11" | agrupadas_id_final$Renta== "R12" | agrupadas_id_final$Renta== "R13" | agrupadas_id_final$Renta== "R14"| agrupadas_id_final$Renta== "R21"| agrupadas_id_final$Renta== "R15"| agrupadas_id_final$Renta== "R16"| agrupadas_id_final$Renta== "R17"| agrupadas_id_final$Renta== "R18"] <- "1"
+agrupadas_id_final$grupo_renta_CD[agrupadas_id_final$Renta== "R1"| agrupadas_id_final$Renta== "R11" | agrupadas_id_final$Renta== "R15"] <- "1"
+agrupadas_id_final$grupo_renta_DE[agrupadas_id_final$Renta== "R6"| agrupadas_id_final$Renta== "R7" | agrupadas_id_final$Renta== "R8" | agrupadas_id_final$Renta== "R9" | agrupadas_id_final$Renta== "R10" | agrupadas_id_final$Renta== "R11" | agrupadas_id_final$Renta== "R12" | agrupadas_id_final$Renta== "R13" | agrupadas_id_final$Renta== "R14"| agrupadas_id_final$Renta== "R21"| agrupadas_id_final$Renta== "R15"| agrupadas_id_final$Renta== "R16"| agrupadas_id_final$Renta== "R17"| agrupadas_id_final$Renta== "R18" | agrupadas_id_final$Renta== "R19" | agrupadas_id_final$Renta== "R20"] <- "1"
+agrupadas_id_final$grupo_renta_EE[agrupadas_id_final$Renta== "R9" | agrupadas_id_final$Renta== "R10" | agrupadas_id_final$Renta== "R11" | agrupadas_id_final$Renta== "R12" | agrupadas_id_final$Renta== "R13" | agrupadas_id_final$Renta== "R14"| agrupadas_id_final$Renta== "R21"| agrupadas_id_final$Renta== "R15"| agrupadas_id_final$Renta== "R16"| agrupadas_id_final$Renta== "R17"| agrupadas_id_final$Renta== "R18" | agrupadas_id_final$Renta== "R19"| agrupadas_id_final$Renta== "R20"] <- "1"
+
+#grupos comuna
+
+agrupadas_id_final$grupo_comuna_AA[agrupadas_id_final$Comuna== "70"| agrupadas_id_final$Comuna== "37" | agrupadas_id_final$Comuna== "150"| agrupadas_id_final$Comuna== "10"| agrupadas_id_final$Comuna== "330"| agrupadas_id_final$Comuna== "106"| agrupadas_id_final$Comuna== "103"] <- "1"
+agrupadas_id_final$grupo_comuna_BB[agrupadas_id_final$Comuna== "71"| agrupadas_id_final$Comuna== "91" | agrupadas_id_final$Comuna== "72"| agrupadas_id_final$Comuna== "37"| agrupadas_id_final$Comuna== "322"| agrupadas_id_final$Comuna== "92"| agrupadas_id_final$Comuna== "331"| agrupadas_id_final$Comuna== "332"| agrupadas_id_final$Comuna== "334"| agrupadas_id_final$Comuna== "76"| agrupadas_id_final$Comuna== "99"] <- "1"
+agrupadas_id_final$grupo_comuna_CD[agrupadas_id_final$Comuna== "71"| agrupadas_id_final$Comuna== "91" | agrupadas_id_final$Comuna== "72"| agrupadas_id_final$Comuna== "188"| agrupadas_id_final$Comuna== "92"| agrupadas_id_final$Comuna== "331"] <- "1"
+agrupadas_id_final$grupo_comuna_DE[agrupadas_id_final$Comuna== "71"| agrupadas_id_final$Comuna== "72" | agrupadas_id_final$Comuna== "92"| agrupadas_id_final$Comuna== "331"| agrupadas_id_final$Comuna== "332"| agrupadas_id_final$Comuna== "334"| agrupadas_id_final$Comuna== "76"] <- "1"
+agrupadas_id_final$grupo_comuna_EE[agrupadas_id_final$Comuna== "188"| agrupadas_id_final$Comuna== "37" | agrupadas_id_final$Comuna== "322"| agrupadas_id_final$Comuna== "92"| agrupadas_id_final$Comuna== "331"| agrupadas_id_final$Comuna== "34"| agrupadas_id_final$Comuna== "243"| agrupadas_id_final$Comuna== "150"] <- "1"
+
+#reemplazo NA grupo renta y comuna
+
+agrupadas_id_final$grupo_renta_AA[is.na(agrupadas_id_final$grupo_renta_AA)] <- 0
+agrupadas_id_final$grupo_renta_BB[is.na(agrupadas_id_final$grupo_renta_BB)] <- 0
+agrupadas_id_final$grupo_renta_CD[is.na(agrupadas_id_final$grupo_renta_CD)] <- 0
+agrupadas_id_final$grupo_renta_DE[is.na(agrupadas_id_final$grupo_renta_DE)] <- 0
+agrupadas_id_final$grupo_renta_EE[is.na(agrupadas_id_final$grupo_renta_EE)] <- 0
+
+agrupadas_id_final$grupo_comuna_AA[is.na(agrupadas_id_final$grupo_comuna_AA)] <- 0
+agrupadas_id_final$grupo_comuna_BB[is.na(agrupadas_id_final$grupo_comuna_BB)] <- 0
+agrupadas_id_final$grupo_comuna_CD[is.na(agrupadas_id_final$grupo_comuna_CD)] <- 0
+agrupadas_id_final$grupo_comuna_DE[is.na(agrupadas_id_final$grupo_comuna_DE)] <- 0
+agrupadas_id_final$grupo_comuna_EE[is.na(agrupadas_id_final$grupo_comuna_EE)] <- 0
+
+
+#reemplazo NA campanas y comunic#
+#agrupadas_id_final$comuni_AA[is.na(agrupadas_id_final$comuni_AA)] <- 0
+#agrupadas_id_final$comuni_BB[is.na(agrupadas_id_final$comuni_BB)] <- 0
+#agrupadas_id_final$comuni_CD[is.na(agrupadas_id_final$comuni_CD)] <- 0 
+#agrupadas_id_final$comuni_DE[is.na(agrupadas_id_final$comuni_DE)] <- 0 
+#agrupadas_id_final$comuni_EE[is.na(agrupadas_id_final$comuni_EE)] <- 0 
+#agrupadas_id_final$campana_AA[is.na(agrupadas_id_final$campana_AA)] <- 0 
+#agrupadas_id_final$campana_BB[is.na(agrupadas_id_final$campana_BB)] <- 0 
+#agrupadas_id_final$campana_CD[is.na(agrupadas_id_final$campana_CD)] <- 0
+#agrupadas_id_final$campana_DE[is.na(agrupadas_id_final$campana_DE)] <- 0
+
+
+
+write.csv(agrupadas_id_final,"Agrupacion_final_tablon.csv")
+
+#seleccion de variables
+
+tbl = table(agrupadas_id_final$Edad, agrupadas_id_final$tiene_AA) 
+chisq.test(tbl)
+
+tbl = table(agrupadas_id_final$Renta, agrupadas_id_final$tiene_AA) 
+chisq.test(tbl)
+
+tbl = table(agrupadas_id_final$comuni_AA, agrupadas_id_final$tiene_AA) 
+chisq.test(tbl)
+
+tbl = table(agrupadas_id_final$Segmento_consumidor, agrupadas_id_final$tiene_AA) 
+chisq.test(tbl)
+
+tbl = table(agrupadas_id_final$Principalidad, agrupadas_id_final$tiene_AA) 
+chisq.test(tbl)
+
+tbl = table(agrupadas_id_final$Profesion, agrupadas_id_final$tiene_AA) 
+chisq.test(tbl)
+
+tbl = table(agrupadas_id_final$campana_AA, agrupadas_id_final$tiene_AA) 
+chisq.test(tbl)
+
+tbl = table(agrupadas_id_final$grupo_frec, agrupadas_id_final$tiene_AA) 
+chisq.test(tbl)
+
+tbl = table(agrupadas_id_final$grupo_renta_AA, agrupadas_id_final$tiene_AA) 
+chisq.test(tbl)
+
+tbl = table(agrupadas_id_final$grupo_comuna_AA, agrupadas_id_final$tiene_AA) 
+chisq.test(tbl)
+
+#eliminacion de variables#
+
+agrupadas_id_final_modelo<- subset(agrupadas_id_final, select =-c(`frecuency_A-G`,`frecuency_A-K`,`frecuency_F-D`,`frecuency_F-H`,`frecuency_F-I`,`frecuency_F-J`,`frecuency_G-K`,`frecuency_B-B.transa_agrupadas_id`,`frecuency_C-C`,`frecuency_C-D.transa_agrupadas_id`,`frecuency_D-E.transa_agrupadas_id`,`frecuency_D-F`,`frecuency_E-E.transa_campanas_agrupadas_id`,`frecuency_E-F`,`frecuency_A-A.transa_agrupadas_id`,`frecuency_A-L`,`min(Periodo)_A-G`,`min(Periodo)_A-K`,`min(Periodo)_F-D`,`min(Periodo)_F-H`,`min(Periodo)_F-I`,`min(Periodo)_F-J`,`min(Periodo)_G-K`,`min(Periodo)_B-B.transa_agrupadas_id`,`min(Periodo)_C-C`,`min(Periodo)_C-D.transa_agrupadas_id`,`min(Periodo)_D-E.transa_agrupadas_id`,`min(Periodo)_D-F`,`min(Periodo)_E-E.transa_campanas_agrupadas_id`,`min(Periodo)_E-F`,`min(Periodo)_A-A.transa_agrupadas_id`,`min(Periodo)_A-L`,`max(Periodo)_A-G`,`max(Periodo)_A-K`,`max(Periodo)_F-D`,`max(Periodo)_F-H`,`max(Periodo)_F-I`,`max(Periodo)_F-J`,`max(Periodo)_G-K`,`max(Periodo)_B-B.transa_agrupadas_id`,`max(Periodo)_C-C`,`max(Periodo)_C-D.transa_agrupadas_id`,`max(Periodo)_D-E.transa_agrupadas_id`,`max(Periodo)_D-F`,`max(Periodo)_E-E.transa_campanas_agrupadas_id`,`max(Periodo)_E-F`,`max(Periodo)_A-A.transa_agrupadas_id`,`max(Periodo)_A-L`,`frecuency_A-A.campanas_agrupadas_id`,`frecuency_B-B.campanas_agrupadas_id`,`frecuency_C-D.campanas_agrupadas_id`,`frecuency_D-E.campanas_agrupadas_id`,`min(Periodo)_A-A.campanas_agrupadas_id`,`min(Periodo)_B-B.campanas_agrupadas_id`,`min(Periodo)_C-D.campanas_agrupadas_id`,`min(Periodo)_D-E.campanas_agrupadas_id`,`max(Periodo)_A-A.campanas_agrupadas_id`,`max(Periodo)_B-B.campanas_agrupadas_id`,`max(Periodo)_C-D.campanas_agrupadas_id`,`max(Periodo)_D-E.campanas_agrupadas_id`,`frecuency_B-B`,`frecuency_D-E`,`frecuency_E-E.comuni_agrupadas_id`,`frecuency_C-D`,`frecuency_A-A`,`min(Periodo)_B-B`,`min(Periodo)_D-E`,`min(Periodo)_E-E.comuni_agrupadas_id`,`min(Periodo)_C-D`,`min(Periodo)_A-A`,`max(Periodo)_B-B`,`max(Periodo)_D-E`,`max(Periodo)_E-E.comuni_agrupadas_id`,`max(Periodo)_C-D`,`max(Periodo)_A-A`,`X`))
+
+#transformacion variables objetivo#
+
+agrupadas_id_final_modelo$tiene_AA_2 <- ifelse(agrupadas_id_final_modelo$tiene_AA == "1","tiene","notiene")
+agrupadas_id_final_modelo$tiene_BB_2 <- ifelse(agrupadas_id_final_modelo$tiene_BB == "1","tiene","notiene")
+agrupadas_id_final_modelo$tiene_CD_2 <- ifelse(agrupadas_id_final_modelo$tiene_CD == "1","tiene","notiene")
+agrupadas_id_final_modelo$tiene_DE_2 <- ifelse(agrupadas_id_final_modelo$tiene_DE == "1","tiene","notiene")
+agrupadas_id_final_modelo$tiene_EE_2 <- ifelse(agrupadas_id_final_modelo$tiene_EE == "1","tiene","notiene")
+
+
+write.csv(agrupadas_id_final_modelo,"Agrupacion_final_modelo.csv")
+
+agrupadas_id_final_modelo<- read.csv("Agrupacion_final_modelo.csv")
+
+
+
+## Division ##
+set.seed(101)
+sample <- sample.int(n = nrow(agrupadas_id_final_modelo), size = floor(.75*nrow(agrupadas_id_final_modelo)), replace = F)
+training <- agrupadas_id_final_modelo[sample, ]
+testing  <- agrupadas_id_final_modelo[-sample, ]
+
+##Cross-Validation##
+ctrl <- trainControl(method="cv",number= 5, summaryFunction=twoClassSummary, classProbs = TRUE,verboseIter = TRUE)
+ctrl_smote <- trainControl(method="cv",number= 5, summaryFunction=twoClassSummary, sampling="smote", classProbs = TRUE, verboseIter = TRUE)
+
+
+##Formula## AA
+
+formula_AA <- as.formula(tiene_AA_2 ~ Edad + Segmento_consumidor + Principalidad + comuni_AA + campana_AA + grupo_frec + grupo_renta_AA + grupo_comuna_AA)
+
+#Logit
+set.seed(101)
+logit_AA <- train(formula_AA, training, method="glm", family="binomial", trControl = ctrl, metric="ROC")
+
+set.seed(101)
+logit_smote_AA <- train(formula_AA, training, method="glm", family="binomial", trControl = ctrl_smote, metric="ROC")
+
+logit_AA
+summary(logit_AA)
+logit_smote
+summary(logit_smote)
+
+# Arbol no optimizado
+set.seed(101)
+TREE <- train(formula, training, method = "rpart", trControl=trainControl(method="none"),tuneGrid=data.frame(cp=0.01))
+TREE$finalModel
+rpart.plot(TREE$finalModel)
+TREE
+
+# Arbol optimizado
+set.seed(101)
+TREE <- train(formula, training, method = "rpart", trControl = ctrl, metric="ROC")
+TREE$finalModel
+rpart.plot(TREE$finalModel)
+TREE
+
+#Random Forest
+set.seed(101)
+RF <- train(formula, training, method="rf", family="binomial", trControl = ctrl, metric="ROC")
+RF
+plot(RF$finalModel)
+
+#Red neuronal
+
+set.seed(101)
+NN <- train(formula, training, method="nnet", family="binomial", trControl = ctrl, metric="ROC")
+plot(NN)
+NN
+
+results <- resamples(list(LOGIT_SMOTE=logit_smote,LOGIT=logit,TREE=TREE,NN=NN))
+summary(results)
+
+
+#Prediccion
+
+testing$PROB_tiene_AA <- predict(logit_smote_AA, newdata = testing, type='prob')$tiene
+
+######### Validación
+Probabilidad = testing$PROB_tiene_AA
+label = testing$tiene_AA_2
+
+#Matriz de confusión
+
+testing$Predict_tiene_AA <- as.factor(ifelse(testing$PROB_tiene_AA>0.45,"tiene","notiene"))
+confusionMatrix(testing$Predict_tiene_AA,as.factor(testing$tiene_AA_2), positive = "tiene")
+
+
+##Formula## BB
+
+formula_BB <- as.formula(tiene_BB_2 ~ Edad + Principalidad + comuni_BB + campana_BB + grupo_frec + grupo_renta_BB + grupo_comuna_BB)
+
+#Logit
+set.seed(101)
+logit_BB <- train(formula_BB, training, method="glm", family="binomial", trControl = ctrl, metric="ROC")
+logit_BB
+
+set.seed(101)
+logit_smote_BB <- train(formula_BB, training, method="glm", family="binomial", trControl = ctrl_smote, metric="ROC")
+
+#Prediccion
+
+testing$PROB_tiene_BB <- predict(logit_BB, newdata = testing, type='prob')$tiene
+
+######### Validación
+Probabilidad = testing$PROB_tiene_BB
+label = testing$tiene_BB_2
+
+#Matriz de confusión
+
+testing$Predict_tiene_BB <- as.factor(ifelse(testing$PROB_tiene_BB>0.6,"tiene","notiene"))
+confusionMatrix(testing$Predict_tiene_BB,as.factor(testing$tiene_BB_2), positive = "tiene")
+
+
+##Formula## CD
+
+formula_CD <- as.formula(tiene_CD_2 ~ Edad + Principalidad + comuni_CD + campana_CD + grupo_frec + grupo_renta_CD + grupo_comuna_CD)
+
+#Logit
+set.seed(101)
+logit_CD <- train(formula_CD, training, method="glm", family="binomial", trControl = ctrl, metric="ROC")
+logit_CD
+
+set.seed(101)
+logit_smote_CD <- train(formula_CD, training, method="glm", family="binomial", trControl = ctrl_smote, metric="ROC")
+logit_smote_CD
+
+#Prediccion
+
+testing$PROB_tiene_CD <- predict(logit_smote_CD, newdata = testing, type='prob')$tiene
+
+######### Validación
+Probabilidad = testing$PROB_tiene_CD
+label = testing$tiene_CD_2
+
+#Matriz de confusión
+
+testing$Predict_tiene_CD <- as.factor(ifelse(testing$PROB_tiene_CD>0.55,"tiene","notiene"))
+confusionMatrix(testing$Predict_tiene_CD,as.factor(testing$tiene_CD_2), positive = "tiene")
+
+
+##Formula## DE
+
+formula_DE <- as.formula(tiene_DE_2 ~ Edad + Principalidad + comuni_DE + campana_DE + grupo_frec + grupo_renta_DE + grupo_comuna_DE)
+
+#Logit
+set.seed(101)
+logit_DE <- train(formula_DE, training, method="glm", family="binomial", trControl = ctrl, metric="ROC")
+logit_DE
+
+set.seed(101)
+logit_smote_DE <- train(formula_DE, training, method="glm", family="binomial", trControl = ctrl_smote, metric="ROC")
+logit_smote_DE
+
+#Prediccion
+
+testing$PROB_tiene_DE <- predict(logit_DE, newdata = testing, type='prob')$tiene
+
+######### Validación
+Probabilidad = testing$PROB_tiene_DE
+label = testing$tiene_DE_2
+
+#Matriz de confusión
+
+testing$Predict_tiene_DE <- as.factor(ifelse(testing$PROB_tiene_DE>0.65,"tiene","notiene"))
+confusionMatrix(testing$Predict_tiene_DE,as.factor(testing$tiene_DE_2), positive = "tiene")
+
+##Formula## EE
+
+formula_EE <- as.formula(tiene_EE_2 ~ Edad + Principalidad + comuni_EE + grupo_frec + grupo_renta_EE + grupo_comuna_EE)
+
+#Logit
+set.seed(101)
+logit_EE <- train(formula_EE, training, method="glm", family="binomial", trControl = ctrl, metric="ROC")
+logit_EE
+
+set.seed(101)
+logit_smote_EE <- train(formula_EE, training, method="glm", family="binomial", trControl = ctrl_smote, metric="ROC")
+logit_smote_EE
+
+#Prediccion
+
+testing$PROB_tiene_EE <- predict(logit_smote_EE, newdata = testing, type='prob')$tiene
+
+######### Validación
+Probabilidad = testing$PROB_tiene_EE
+label = testing$tiene_EE_2
+
+#Matriz de confusión
+
+testing$Predict_tiene_EE <- as.factor(ifelse(testing$PROB_tiene_EE>0.55,"tiene","notiene"))
+confusionMatrix(testing$Predict_tiene_EE,as.factor(testing$tiene_EE_2), positive = "tiene")
+
+logit_AA
+logit_smote_AA
+
+logit_CD
+logit_smote_CD
+
+logit_DE
+logit_smote_DE
+
+logit_EE
+logit_smote_EE
+
+
+######################################################################    PREDICCIONES   ##############################################################
+
+campanas <- read.csv("Campanas_test.csv")
+transacciones <- read.csv("Transaccion_test.csv")
+comuni<- read.csv("Comunicaciones_test.csv")
+consumidores<- read.csv("Consumidores.csv")
+
+#imputaciones
+
+transa_agrupadas <- transacciones %>% group_by(id,Producto.Tipo) %>% summarise(frecuency = n(),max(Periodo),min(Periodo))
+transa_agrupadas_id <- transa_agrupadas %>% pivot_wider(names_from = Producto.Tipo, values_from = c(frecuency,`min(Periodo)`, `max(Periodo)`))
+
+campanas_agrupadas <- campanas %>% group_by(id,Producto.Tipo) %>% summarise(frecuency = n(),max(Periodo),min(Periodo))
+campanas_agrupadas_id <- campanas_agrupadas %>% pivot_wider(names_from = Producto.Tipo, values_from = c(frecuency,`min(Periodo)`, `max(Periodo)`))
+transa_campanas_agrupadas_id <- left_join(transa_agrupadas_id, campanas_agrupadas_id, by = "id", copy=FALSE, suffix=c(".transa_agrupadas_id",".campanas_agrupadas_id"))
+
+comuni_agrupadas <- comuni %>% group_by(id,Producto.Tipo) %>% summarise(frecuency = n(),max(Periodo),min(Periodo))
+comuni_agrupadas_id <- comuni_agrupadas %>% pivot_wider(names_from = Producto.Tipo, values_from = c(frecuency,`min(Periodo)`, `max(Periodo)`))
+transa_campanas_comuni_agrupadas_id <- left_join(transa_campanas_agrupadas_id, comuni_agrupadas_id, by = "id", copy=FALSE, suffix=c(".transa_campanas_agrupadas_id",".comuni_agrupadas_id"))
+
+agrupadas_id_final <- left_join(transa_campanas_comuni_agrupadas_id, consumidores, by = "id", copy=FALSE, suffix=c(".transa_campanas_comuni_agrupadas_id",".consumidores"))
+
+
+#reemplazo de NA#
+
+agrupadas_id_final$`frecuency_F-D`[is.na(agrupadas_id_final$`frecuency_F-D`)] <- 0
+agrupadas_id_final$`frecuency_A-G`[is.na(agrupadas_id_final$`frecuency_A-G`)] <- 0
+agrupadas_id_final$`frecuency_A-K`[is.na(agrupadas_id_final$`frecuency_A-K`)] <- 0
+agrupadas_id_final$`frecuency_F-H`[is.na(agrupadas_id_final$`frecuency_F-H`)] <- 0
+agrupadas_id_final$`frecuency_F-I`[is.na(agrupadas_id_final$`frecuency_F-I`)] <- 0
+agrupadas_id_final$`frecuency_F-J`[is.na(agrupadas_id_final$`frecuency_F-J`)] <- 0
+agrupadas_id_final$`frecuency_G-K`[is.na(agrupadas_id_final$`frecuency_G-K`)] <- 0
+agrupadas_id_final$`frecuency_C-C`[is.na(agrupadas_id_final$`frecuency_C-C`)] <- 0
+agrupadas_id_final$`frecuency_D-F`[is.na(agrupadas_id_final$`frecuency_D-F`)] <- 0
+agrupadas_id_final$`frecuency_E-F`[is.na(agrupadas_id_final$`frecuency_E-F`)] <- 0
+agrupadas_id_final$`frecuency_A-L`[is.na(agrupadas_id_final$`frecuency_A-L`)] <- 0
+
+warnings()
+
+#expuesto a comunicacion#
+#agrupadas_id_final$comuni_AA <- ifelse(agrupadas_id_final$`min(Periodo)_A-A.transa_agrupadas_id` >= agrupadas_id_final$`min(Periodo)_A-A`, "1" ,ifelse(agrupadas_id_final$`max(Periodo)_A-A.transa_agrupadas_id` >= agrupadas_id_final$`min(Periodo)_A-A`,"1","0"))
+
+agrupadas_id_final$comuni_AA <- ifelse(is.na(agrupadas_id_final$`min(Periodo)_A-A.comuni_agrupadas_id`), "0" ,"1")
+agrupadas_id_final$comuni_BB <- ifelse(is.na(agrupadas_id_final$`min(Periodo)_B-B.comuni_agrupadas_id`), "0" ,"1")
+agrupadas_id_final$comuni_CD <- ifelse(is.na(agrupadas_id_final$`min(Periodo)_C-D.comuni_agrupadas_id`), "0" ,"1")
+agrupadas_id_final$comuni_DE <- ifelse(is.na(agrupadas_id_final$id), "0" ,"0")
+agrupadas_id_final$comuni_EE <- ifelse(is.na(agrupadas_id_final$id), "0" ,"0")
+
+#expuesto a campana#
+
+agrupadas_id_final$campana_AA <- ifelse(is.na(agrupadas_id_final$`min(Periodo)_A-A.transa_campanas_agrupadas_id`), "0" ,"1")
+agrupadas_id_final$campana_BB <- ifelse(is.na(agrupadas_id_final$`min(Periodo)_B-B.transa_campanas_agrupadas_id`), "0" ,"1")
+agrupadas_id_final$campana_CD <- ifelse(is.na(agrupadas_id_final$`min(Periodo)_C-D.transa_campanas_agrupadas_id`), "0" ,"1")
+agrupadas_id_final$campana_DE <- ifelse(is.na(agrupadas_id_final$`min(Periodo)_D-E`), "0" ,"1")
+agrupadas_id_final$campana_EE <- ifelse(is.na(agrupadas_id_final$id), "0" ,"0")
+
+#agregar segmento de frecuencia de uso
+
+agrupadas_id_final$sumafrecuencias <- (agrupadas_id_final$`frecuency_A-G`+agrupadas_id_final$`frecuency_A-K`+agrupadas_id_final$`frecuency_F-D`+agrupadas_id_final$`frecuency_F-H`+agrupadas_id_final$`frecuency_F-I`+agrupadas_id_final$`frecuency_F-J`+agrupadas_id_final$`frecuency_G-K`+agrupadas_id_final$`frecuency_C-C`+agrupadas_id_final$`frecuency_D-F`+agrupadas_id_final$`frecuency_E-F`+agrupadas_id_final$`frecuency_E-F`+agrupadas_id_final$`frecuency_A-L`)
+
+agrupadas_id_final$tiene_AG <- ifelse(agrupadas_id_final$`frecuency_A-G`>="1","1","0")
+agrupadas_id_final$tiene_AK <- ifelse(agrupadas_id_final$`frecuency_A-K`>="1","1","0")
+agrupadas_id_final$tiene_GK <- ifelse(agrupadas_id_final$`frecuency_G-K`>="1","1","0")
+agrupadas_id_final$tiene_DF <- ifelse(agrupadas_id_final$`frecuency_D-F`>="1","1","0")
+agrupadas_id_final$tiene_EF <- ifelse(agrupadas_id_final$`frecuency_E-F`>="1","1","0")
+agrupadas_id_final$tiene_CC <- ifelse(agrupadas_id_final$`frecuency_C-C`>="1","1","0")
+
+
+#grupos frec
+
+agrupadas_id_final$grupo_frec[agrupadas_id_final$sumafrecuencias<= 42] <- "BAJO"
+agrupadas_id_final$grupo_frec[agrupadas_id_final$sumafrecuencias> 42 & agrupadas_id_final$sumafrecuencias<= 60] <- "MEDIO"
+agrupadas_id_final$grupo_frec[agrupadas_id_final$sumafrecuencias>60] <- "ALTO"
+
+#grupos renta
+
+agrupadas_id_final$grupo_renta_AA[agrupadas_id_final$Renta== "R7"| agrupadas_id_final$Renta== "R8" | agrupadas_id_final$Renta== "R9" | agrupadas_id_final$Renta== "R10" | agrupadas_id_final$Renta== "R11" | agrupadas_id_final$Renta== "R12" | agrupadas_id_final$Renta== "R16"] <- "1"
+agrupadas_id_final$grupo_renta_BB[agrupadas_id_final$Renta== "R6"| agrupadas_id_final$Renta== "R7" | agrupadas_id_final$Renta== "R8" | agrupadas_id_final$Renta== "R9" | agrupadas_id_final$Renta== "R10" | agrupadas_id_final$Renta== "R11" | agrupadas_id_final$Renta== "R12" | agrupadas_id_final$Renta== "R13" | agrupadas_id_final$Renta== "R14"| agrupadas_id_final$Renta== "R21"| agrupadas_id_final$Renta== "R15"| agrupadas_id_final$Renta== "R16"| agrupadas_id_final$Renta== "R17"| agrupadas_id_final$Renta== "R18"] <- "1"
+agrupadas_id_final$grupo_renta_CD[agrupadas_id_final$Renta== "R1"| agrupadas_id_final$Renta== "R11" | agrupadas_id_final$Renta== "R15"] <- "1"
+agrupadas_id_final$grupo_renta_DE[agrupadas_id_final$Renta== "R6"| agrupadas_id_final$Renta== "R7" | agrupadas_id_final$Renta== "R8" | agrupadas_id_final$Renta== "R9" | agrupadas_id_final$Renta== "R10" | agrupadas_id_final$Renta== "R11" | agrupadas_id_final$Renta== "R12" | agrupadas_id_final$Renta== "R13" | agrupadas_id_final$Renta== "R14"| agrupadas_id_final$Renta== "R21"| agrupadas_id_final$Renta== "R15"| agrupadas_id_final$Renta== "R16"| agrupadas_id_final$Renta== "R17"| agrupadas_id_final$Renta== "R18" | agrupadas_id_final$Renta== "R19" | agrupadas_id_final$Renta== "R20"] <- "1"
+agrupadas_id_final$grupo_renta_EE[agrupadas_id_final$Renta== "R9" | agrupadas_id_final$Renta== "R10" | agrupadas_id_final$Renta== "R11" | agrupadas_id_final$Renta== "R12" | agrupadas_id_final$Renta== "R13" | agrupadas_id_final$Renta== "R14"| agrupadas_id_final$Renta== "R21"| agrupadas_id_final$Renta== "R15"| agrupadas_id_final$Renta== "R16"| agrupadas_id_final$Renta== "R17"| agrupadas_id_final$Renta== "R18" | agrupadas_id_final$Renta== "R19"| agrupadas_id_final$Renta== "R20"] <- "1"
+
+#grupos comuna
+
+agrupadas_id_final$grupo_comuna_AA[agrupadas_id_final$Comuna== "70"| agrupadas_id_final$Comuna== "37" | agrupadas_id_final$Comuna== "150"| agrupadas_id_final$Comuna== "10"| agrupadas_id_final$Comuna== "330"| agrupadas_id_final$Comuna== "106"| agrupadas_id_final$Comuna== "103"] <- "1"
+agrupadas_id_final$grupo_comuna_BB[agrupadas_id_final$Comuna== "71"| agrupadas_id_final$Comuna== "91" | agrupadas_id_final$Comuna== "72"| agrupadas_id_final$Comuna== "37"| agrupadas_id_final$Comuna== "322"| agrupadas_id_final$Comuna== "92"| agrupadas_id_final$Comuna== "331"| agrupadas_id_final$Comuna== "332"| agrupadas_id_final$Comuna== "334"| agrupadas_id_final$Comuna== "76"| agrupadas_id_final$Comuna== "99"] <- "1"
+agrupadas_id_final$grupo_comuna_CD[agrupadas_id_final$Comuna== "71"| agrupadas_id_final$Comuna== "91" | agrupadas_id_final$Comuna== "72"| agrupadas_id_final$Comuna== "188"| agrupadas_id_final$Comuna== "92"| agrupadas_id_final$Comuna== "331"] <- "1"
+agrupadas_id_final$grupo_comuna_DE[agrupadas_id_final$Comuna== "71"| agrupadas_id_final$Comuna== "72" | agrupadas_id_final$Comuna== "92"| agrupadas_id_final$Comuna== "331"| agrupadas_id_final$Comuna== "332"| agrupadas_id_final$Comuna== "334"| agrupadas_id_final$Comuna== "76"] <- "1"
+agrupadas_id_final$grupo_comuna_EE[agrupadas_id_final$Comuna== "188"| agrupadas_id_final$Comuna== "37" | agrupadas_id_final$Comuna== "322"| agrupadas_id_final$Comuna== "92"| agrupadas_id_final$Comuna== "331"| agrupadas_id_final$Comuna== "34"| agrupadas_id_final$Comuna== "243"| agrupadas_id_final$Comuna== "150"] <- "1"
+
+#reemplazo NA grupo renta y comuna
+
+agrupadas_id_final$grupo_renta_AA[is.na(agrupadas_id_final$grupo_renta_AA)] <- 0
+agrupadas_id_final$grupo_renta_BB[is.na(agrupadas_id_final$grupo_renta_BB)] <- 0
+agrupadas_id_final$grupo_renta_CD[is.na(agrupadas_id_final$grupo_renta_CD)] <- 0
+agrupadas_id_final$grupo_renta_DE[is.na(agrupadas_id_final$grupo_renta_DE)] <- 0
+agrupadas_id_final$grupo_renta_EE[is.na(agrupadas_id_final$grupo_renta_EE)] <- 0
+
+agrupadas_id_final$grupo_comuna_AA[is.na(agrupadas_id_final$grupo_comuna_AA)] <- 0
+agrupadas_id_final$grupo_comuna_BB[is.na(agrupadas_id_final$grupo_comuna_BB)] <- 0
+agrupadas_id_final$grupo_comuna_CD[is.na(agrupadas_id_final$grupo_comuna_CD)] <- 0
+agrupadas_id_final$grupo_comuna_DE[is.na(agrupadas_id_final$grupo_comuna_DE)] <- 0
+agrupadas_id_final$grupo_comuna_EE[is.na(agrupadas_id_final$grupo_comuna_EE)] <- 0
+
+write.csv(agrupadas_id_final,"agrupadas_id_final_TEST.csv")
+
+agrupadas_id_final<- read.csv("agrupadas_id_final_TEST.csv")
+
+str(agrupadas_id_final)
+str(agrupadas_id_final_modelo)
+
+#AA#
+agrupadas_id_final$comuni_AA <- as.integer(agrupadas_id_final$comuni_AA)
+agrupadas_id_final$campana_AA <- as.integer(agrupadas_id_final$campana_AA)
+agrupadas_id_final$grupo_renta_AA <- as.integer(agrupadas_id_final$grupo_renta_AA)
+agrupadas_id_final$grupo_comuna_AA <- as.integer(agrupadas_id_final$grupo_comuna_AA)
+
+agrupadas_id_final$PROB_tiene_AA <- predict(logit_smote_AA, newdata = agrupadas_id_final, type='prob')$tiene
+
+#BB#
+agrupadas_id_final$comuni_BB <- as.integer(agrupadas_id_final$comuni_BB)
+agrupadas_id_final$campana_BB <- as.integer(agrupadas_id_final$campana_BB)
+agrupadas_id_final$grupo_renta_BB <- as.integer(agrupadas_id_final$grupo_renta_BB)
+agrupadas_id_final$grupo_comuna_BB <- as.integer(agrupadas_id_final$grupo_comuna_BB)
+
+agrupadas_id_final$PROB_tiene_BB <- predict(logit_BB, newdata = agrupadas_id_final, type='prob')$tiene
+
+#CD#
+
+agrupadas_id_final$comuni_CD <- as.integer(agrupadas_id_final$comuni_CD)
+agrupadas_id_final$campana_CD <- as.integer(agrupadas_id_final$campana_CD)
+agrupadas_id_final$grupo_renta_CD <- as.integer(agrupadas_id_final$grupo_renta_CD)
+agrupadas_id_final$grupo_comuna_CD <- as.integer(agrupadas_id_final$grupo_comuna_CD)
+
+agrupadas_id_final$PROB_tiene_CD <- predict(logit_smote_CD, newdata = agrupadas_id_final, type='prob')$tiene
+
+#DE#
+
+agrupadas_id_final$comuni_DE <- as.integer(agrupadas_id_final$comuni_DE)
+agrupadas_id_final$campana_DE <- as.integer(agrupadas_id_final$campana_DE)
+agrupadas_id_final$grupo_renta_DE <- as.integer(agrupadas_id_final$grupo_renta_DE)
+agrupadas_id_final$grupo_comuna_DE <- as.integer(agrupadas_id_final$grupo_comuna_DE)
+
+agrupadas_id_final$PROB_tiene_DE <- predict(logit_DE, newdata = agrupadas_id_final, type='prob')$tiene
+
+#EE#
+
+agrupadas_id_final$comuni_EE <- as.integer(agrupadas_id_final$comuni_EE)
+agrupadas_id_final$campana_EE <- as.integer(agrupadas_id_final$campana_EE)
+agrupadas_id_final$grupo_renta_EE <- as.integer(agrupadas_id_final$grupo_renta_EE)
+agrupadas_id_final$grupo_comuna_EE <- as.integer(agrupadas_id_final$grupo_comuna_EE)
+
+agrupadas_id_final$PROB_tiene_EE <- predict(logit_smote_EE, newdata = agrupadas_id_final, type='prob')$tiene
+
+
+write.csv(agrupadas_id_final, file="Base_test_JQ_V2.csv")
